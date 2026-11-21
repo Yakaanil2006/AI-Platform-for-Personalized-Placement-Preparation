@@ -74,3 +74,8 @@ npm.cmd --prefix frontend run build
 ```
 
 The integration tests use a temporary SQLite database. Dynamic tests generate questions in batches of five and validate the complete set before saving it. Students choose 1–50 questions and a coding language. Completed attempts contribute one aggregate assessment per test; retrying an answered question returns its saved result. Administrators review pending experiences. Create an administrator from PowerShell with ./start-live.ps1 -CreateAdministrator -Email admin@example.com. The database layer resolves Neon through DNS over HTTPS when local DNS fails, so CLI commands and the app share the same recovery behavior. They cover text extraction, skill evidence, objective scoring, assessment feedback, interview adaptation and duplicate submissions, persisted roadmap progress, account isolation, experience approval and rollback, retrieval, and invalid model responses. Test PostgreSQL migrations and retrieval against a dedicated database before deploying.
+
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
