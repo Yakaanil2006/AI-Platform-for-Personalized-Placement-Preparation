@@ -628,7 +628,12 @@ def create_test(payload: TestRequest, db: Db, user: CurrentUser):
                 questions.append(dict(topic="Problem solving" if payload.kind == "coding" else "Communication", prompt=prompt))
         return {"questions": questions}
     questions = []
+    generation_attempts = 0
+    seen = {prompt.strip().casefold() for prompt in excluded}
     while len(questions) < payload.count:
+        generation_attempts += 1
+        if generation_attempts > (payload.count + 4) // 5 + 5:
+            raise HTTPException(503, "Could not generate enough fresh questions. Please try again.")
         batch_count = min(5, payload.count - len(questions))
         batch = generate(QuestionBatch,
             "Generate exactly the requested count of distinct assessment questions for the requested kind. "
@@ -646,18 +651,17 @@ def create_test(payload: TestRequest, db: Db, user: CurrentUser):
              "target": target["analysis"] if payload.kind != "aptitude" or payload.aptitude_mode == "target" else {},
              "previous_prompts": (excluded + [q["prompt"] for q in questions])[-250:], "variation": uuid4().hex}, lambda: {"questions": demo()["questions"][:batch_count]})
         batch_questions = batch["questions"]
-        seen = {q["prompt"].strip().casefold() for q in questions} | {prompt.strip().casefold() for prompt in excluded}
-        if len(batch_questions) != batch_count:
-            raise HTTPException(503, "Question generation returned an incomplete set. Please retry.")
         for question in batch_questions:
             fingerprint = question["prompt"].strip().casefold()
             if fingerprint in seen:
-                raise HTTPException(503, "Question generation repeated a question. Please retry.")
-            seen.add(fingerprint)
+                continue
             if payload.kind == "aptitude" and (len(question["choices"]) != 4 or len(set(question["choices"])) != 4 or question["correct"] is None):
-                raise HTTPException(503, "Question generation returned an invalid answer key. Please retry.")
+                continue
+            seen.add(fingerprint)
             question["id"] = uuid4().hex
-        questions.extend(batch_questions)
+            questions.append(question)
+            if len(questions) == payload.count:
+                break
     record = Record(user_id=user.id, target_id=target["id"], kind="test",
                     data={"kind": payload.kind, "aptitude_mode": payload.aptitude_mode, "difficulty": payload.difficulty, "language": payload.language if payload.kind == "coding" else None, "questions": questions, "results": {}})
     db.add(record)
