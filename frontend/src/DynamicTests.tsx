@@ -11,6 +11,8 @@ export function DynamicTests({kind}: {kind: 'coding' | 'aptitude' | 'communicati
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [count, setCount] = useState(10);
+  const [aptitudeMode, setAptitudeMode] = useState("general");
+  const [difficulty, setDifficulty] = useState("mixed");
   const [language, setLanguage] = useState("Python");
   useEffect(() => {
     let active = true;
@@ -33,11 +35,19 @@ export function DynamicTests({kind}: {kind: 'coding' | 'aptitude' | 'communicati
   }
   return <>
     <section className="card"><h2>Start a new test</h2>
-      <form onSubmit={event => {event.preventDefault(); void run(async () => update(await api<Test>('/tests', 'POST', {kind, count, language})));}}>
+      <form onSubmit={event => {event.preventDefault(); void run(async () => update(await api<Test>('/tests', 'POST', {kind, count, language, aptitude_mode: aptitudeMode, difficulty})));}}>
         <label>Number of questions<input type="number" min={1} max={50} required value={count} onChange={event => setCount(Number(event.target.value))}/></label>
         {kind === 'coding' && <label>Programming language<select value={language} onChange={event => setLanguage(event.target.value)} disabled={busy}>{['Python','Java','C++','JavaScript'].map(value => <option key={value}>{value}</option>)}</select></label>}
+        {kind === 'aptitude' && <>
+          <label>Test style<select value={aptitudeMode} onChange={event => setAptitudeMode(event.target.value)} disabled={busy}>
+            <option value="general">General placement aptitude</option><option value="target">Target-role aptitude</option>
+          </select></label>
+          <label>Difficulty<select value={difficulty} onChange={event => setDifficulty(event.target.value)} disabled={busy}>
+            <option value="mixed">Easy to hard</option><option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option>
+          </select></label>
+        </>}
         <button disabled={busy}>{busy ? 'Working…' : 'Generate new test'}</button>
-      </form><p className="muted">Choose 1–50 questions. Each new test generates a fresh set for your target role.</p>
+      </form><p className="muted">{kind === 'aptitude' ? 'Choose 1–50 fresh quantitative, verbal, and logical reasoning questions. General practice progresses from easy to hard or uses your chosen difficulty.' : 'Choose 1–50 questions. Each new test generates a fresh set for your target role.'}</p>
     </section>
     {error && <p className="error" role="alert">{error}</p>}
     {current && <section className="card"><h2>{current.questions.length}-question test{current.language ? " · " + current.language : ""}</h2>

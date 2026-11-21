@@ -591,6 +591,8 @@ class QuestionBatch(Input):
 
 
 class TestRequest(Input):
+    aptitude_mode: Literal["target", "general"] = "target"
+    difficulty: Literal["easy", "medium", "hard", "mixed"] = "mixed"
     language: Literal["Python", "Java", "C++", "JavaScript"] = "Python"
     kind: Literal["coding", "aptitude", "communication"]
     count: int = Field(ge=1, le=50)
@@ -633,8 +635,15 @@ def create_test(payload: TestRequest, db: Db, user: CurrentUser):
             "Coding questions must use only the requested programming language, including function signatures, types and terminology. Never assume Python. Coding questions must use these exact section headings on separate lines: Task:, Function signature:, Constraints:, Example 1:, Example 2:, Complexity requirement:. Put each section content on its own line. In each example clearly label Input: and Output: and add an Explanation: where helpful. Use one constraint per line. Wrap function signatures in backticks. Describe the task clearly and avoid giving the solution. State a suitable complexity requirement. "
             "Communication questions require written responses. Aptitude questions must have exactly four distinct choices, "
             "one correct zero-based answer index, and an explanation. Use empty choices and null correct for other kinds. "
-            "Vary topics and difficulty. Avoid all previously used prompts.",
-            {"kind": payload.kind, "language": payload.language, "count": batch_count, "target": target["analysis"],
+            "For aptitude, balance quantitative aptitude, verbal reasoning (grammar, vocabulary, comprehension), and logical reasoning. "
+            "For general mode use standard placement aptitude independent of technical job requirements. For target mode adapt contexts to the target role while retaining aptitude questions. "
+            "Honor the requested difficulty. For mixed difficulty, progress from easy through medium to hard in the requested overall question positions. "
+            "Provide all information needed to solve each question and verify exactly one choice is correct. "
+            "Avoid all previously used prompts.",
+            {"kind": payload.kind, "language": payload.language, "count": batch_count,
+             "aptitude_mode": payload.aptitude_mode, "difficulty": payload.difficulty,
+             "overall_count": payload.count, "question_positions": list(range(len(questions) + 1, len(questions) + batch_count + 1)),
+             "target": target["analysis"] if payload.kind != "aptitude" or payload.aptitude_mode == "target" else {},
              "previous_prompts": (excluded + [q["prompt"] for q in questions])[-250:], "variation": uuid4().hex}, lambda: {"questions": demo()["questions"][:batch_count]})
         batch_questions = batch["questions"]
         seen = {q["prompt"].strip().casefold() for q in questions} | {prompt.strip().casefold() for prompt in excluded}
@@ -650,7 +659,7 @@ def create_test(payload: TestRequest, db: Db, user: CurrentUser):
             question["id"] = uuid4().hex
         questions.extend(batch_questions)
     record = Record(user_id=user.id, target_id=target["id"], kind="test",
-                    data={"kind": payload.kind, "language": payload.language if payload.kind == "coding" else None, "questions": questions, "results": {}})
+                    data={"kind": payload.kind, "aptitude_mode": payload.aptitude_mode, "difficulty": payload.difficulty, "language": payload.language if payload.kind == "coding" else None, "questions": questions, "results": {}})
     db.add(record)
     db.commit()
     return test_view(record)
