@@ -293,8 +293,8 @@ workflow = graph.compile()
 
 @lru_cache
 def embedding_model():
-    from sentence_transformers import SentenceTransformer
-    return SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    from .embeddings import MiniLM
+    return MiniLM()
 
 
 def embed(texts):
