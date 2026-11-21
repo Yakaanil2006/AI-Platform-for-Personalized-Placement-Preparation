@@ -221,3 +221,24 @@ def test_dynamic_tests_and_administrator_review():
         request(client, "POST", "/auth/login", json={"email": "administrator-test@example.test", "password": "demo-password"})
         assert any(row["id"] == entry["id"] for row in request(client, "GET", "/experiences"))
         request(client, "PATCH", f"/experiences/{entry['id']}/review", json={"status": "approved"})
+
+
+def test_duplicate_questions_are_replaced(monkeypatch):
+    calls = []
+    def generated(_schema, _instruction, payload, _demo):
+        calls.append(payload["count"])
+        if len(calls) == 1:
+            prompts = ["First question", "First question"]
+        else:
+            prompts = ["Second question"]
+        return {"questions": [{"topic": "Communication", "prompt": prompt, "choices": [],
+                               "correct": None, "explanation": ""} for prompt in prompts]}
+    with TestClient(main.app) as client:
+        account(client, "replacement-test")
+        request(client, "POST", "/job-descriptions", json={
+            "company": "Example", "role": "Engineer", "description": "Required: Python",
+        })
+        monkeypatch.setattr(coach, "generate", generated)
+        result = request(client, "POST", "/tests", 201, json={"kind": "communication", "count": 2})
+        assert calls == [2, 1]
+        assert [question["prompt"] for question in result["questions"]] == ["First question", "Second question"]
