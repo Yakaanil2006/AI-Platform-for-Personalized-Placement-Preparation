@@ -1,0 +1,13 @@
+fastapi
+uvicorn
+sqlalchemy
+alembic
+psycopg[binary]
+pgvector
+argon2-cffi
+pypdf
+python-multipart
+python-dotenv
+langgraph
+httpx
+pytest
