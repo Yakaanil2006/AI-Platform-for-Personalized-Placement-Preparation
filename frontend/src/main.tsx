@@ -61,6 +61,7 @@ function Auth({onUser}: {onUser: (user: User) => void}) {
   const action = useAction();
   return <main className="auth"><div className="auth-intro"><Logo/><div><p className="eyebrow">YOUR PLACEMENT WORKSPACE</p><h1>Build confidence for your next interview.</h1><p>Find your skill gaps, practice with an adaptive AI coach, and learn from senior interview experiences.</p></div></div>
     <div className="auth-form"><Card title={register ? 'Create your account' : 'Sign in'}>
+      {!register && <p className="muted">Enter your email and password to continue. If you are new, we’ll create a student account automatically. You can update your name in Profile.</p>}
       <form onSubmit={event => {const payload = values(event); void action.run(async () => onUser(await api<User>('/auth/' + (register ? 'register' : 'login'), 'POST', payload)));}}>
         {register && <label>Name<input name="name" autoComplete="name" required maxLength={100}/></label>}
         <label>Email<input name="email" type="email" autoComplete="email" required/></label>
@@ -68,9 +69,9 @@ function Auth({onUser}: {onUser: (user: User) => void}) {
         <div className="password-field"><input id="auth-password" name="password" type={showPassword ? 'text' : 'password'} autoComplete={register ? 'new-password' : 'current-password'} minLength={8} maxLength={128} required/>
           <button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} title={showPassword ? 'Hide password' : 'Show password'} aria-controls="auth-password" aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff size={20} aria-hidden="true"/> : <Eye size={20} aria-hidden="true"/>}</button></div>
         {register && <label>Account type<select name="role"><option value="student">Student preparing for placements</option><option value="senior">Senior sharing experiences</option></select></label>}
-        <Alert text={action.error}/><button disabled={action.busy}>{action.busy ? 'Please wait…' : register ? 'Create account' : 'Sign in'}</button>
+        <Alert text={action.error}/><button disabled={action.busy}>{action.busy ? 'Please wait…' : register ? 'Create account' : 'Continue'}</button>
       </form>
-      <button className="text-button" onClick={() => {setRegister(!register); setShowPassword(false);}}>{register ? 'Already have an account? Sign in' : 'New here? Create an account'}</button>
+      <button className="text-button" onClick={() => {setRegister(!register); setShowPassword(false);}}>{register ? 'Already have an account? Sign in' : 'Create an account with a name and account type'}</button>
     </Card></div></main>;
 }
 

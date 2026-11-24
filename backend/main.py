@@ -26,7 +26,6 @@ from .db import Base, DEMO, Experience, Login, Record, Session, User, engine
 COOKIE = "placement_session"
 LIFETIME = 60 * 60 * 24 * 7
 PASSWORDS = PasswordHasher()
-DUMMY_PASSWORD = PASSWORDS.hash(secrets.token_urlsafe())
 DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 
 
@@ -196,13 +195,27 @@ def register(data: Registration, db: Db, response: Response, request: Request):
 
 @app.post("/api/auth/login")
 def login(data: Credentials, db: Db, response: Response, request: Request):
-    user = db.scalar(select(User).where(User.email == data.email.lower()))
+    email = data.email.lower()
+    user = db.scalar(select(User).where(User.email == email))
+    if not user:
+        user = User(email=email, name=email.split("@", 1)[0][:100], role="student",
+                    password=PASSWORDS.hash(data.password))
+        db.add(user)
+        try:
+            db.flush()
+        except IntegrityError:
+            # Another request may have created this email while we hashed the password.
+            db.rollback()
+            user = db.scalar(select(User).where(User.email == email))
+            if not user:
+                raise HTTPException(409, "Account creation conflicted. Please retry.") from None
+        else:
+            response.status_code = 201
+            return sign_in(db, user, response, request)
     try:
-        PASSWORDS.verify(user.password if user else DUMMY_PASSWORD, data.password)
+        PASSWORDS.verify(user.password, data.password)
     except VerifyMismatchError:
         raise HTTPException(401, "Email or password is incorrect.") from None
-    if not user:
-        raise HTTPException(401, "Email or password is incorrect.")
     if PASSWORDS.check_needs_rehash(user.password):
         user.password = PASSWORDS.hash(data.password)
     return sign_in(db, user, response, request)
