@@ -4,6 +4,8 @@ An Intelligent AI Platform for Personalized Placement Preparation brings resume 
 
 ## Local demo
 
+On page opening, the frontend requests `/api/health` through Vercel to wake the Render backend before loading the session or login screen. A startup screen waits for JSON readiness, retries read-only health checks for up to 90 seconds, and offers a manual retry if the service remains unavailable. Each request times out after 15 seconds. Closing the page cancels startup retries. This does not keep the server awake indefinitely or prevent Render from sleeping after inactivity. Login and other write requests are never automatically replayed. Run the startup tests with `node --test tests/serverStartup.test.mjs` from `frontend` using Node.js 24 (or a Node.js version supporting TypeScript type stripping).
+
 Use Python 3.12+ and Node.js 22.12+. The demo creates its SQLite database on first launch. It uses deterministic extraction and scoring, a local token-vector search, and a labeled sample Amazon interview experience.
 
 In PowerShell, from the project folder:

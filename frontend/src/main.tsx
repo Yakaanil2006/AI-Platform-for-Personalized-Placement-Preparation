@@ -5,6 +5,7 @@ import {api, type Catalog, type Experience, type Feedback, type Gap, type Interv
 import './styles.css';
 import {DynamicTests} from './DynamicTests';
 import {InterviewAnswer} from './InterviewAnswer';
+import {waitForServer} from './serverStartup';
 
 const navigation = [
   ['overview', 'Overview', LayoutGrid], ['target', 'Resume & target', TargetIcon], ['coding', 'Coding', Code2],
@@ -290,6 +291,27 @@ function Profile({user, setUser}: {user: User; setUser: (user: User) => void}) {
   </form></Card>;
 }
 
+function ServerStartup({children}: {children: ReactNode}) {
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState('');
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setError('');
+    void waitForServer(controller.signal).then(() => {
+      if (!controller.signal.aborted) setReady(true);
+    }).catch(failure => {
+      if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : 'Could not connect to the server.');
+    });
+    return () => controller.abort();
+  }, [retry]);
+  if (ready) return <>{children}</>;
+  return <main className="loading"><Logo/>
+    {error ? <><Alert text={error}/><button onClick={() => {setError(''); setRetry(value => value + 1);}}>Try connecting again</button></>
+      : <div role="status" aria-live="polite"><h1>Starting server…</h1><p>Please wait while we connect. The first visit after inactivity can take about a minute.</p></div>}
+  </main>;
+}
+
 function App() {
   const current = useLoad<User>('/profile');
   const [user, setUser] = useState<User | null>();
@@ -331,4 +353,4 @@ function App() {
   </div>;
 }
 
-createRoot(document.getElementById('root')!).render(<React.StrictMode><App/></React.StrictMode>);
+createRoot(document.getElementById('root')!).render(<React.StrictMode><ServerStartup><App/></ServerStartup></React.StrictMode>);
