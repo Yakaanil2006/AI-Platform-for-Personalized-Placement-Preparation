@@ -13,6 +13,7 @@ from urllib.parse import urlparse, urlencode, urlunparse
 from urllib.robotparser import RobotFileParser
 
 import httpx
+from .roles import normalized_name, normalized_role
 
 log = logging.getLogger(__name__)
 AGENT = "PlacementPrepReferenceBot"
@@ -271,6 +272,7 @@ def fetch_reference_tool(url, cache_bucket):
 
 def public_references(company, role, query):
     """Return fetched excerpts plus explicit link-only entries when unavailable."""
+    company, role = normalized_name(company), normalized_role(role)
     discovered = search_public_platforms(company, role, query)
     catalog = reference_catalog_tool(company, role, query)
     bucket = int(time.time() // 600)

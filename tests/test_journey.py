@@ -421,7 +421,7 @@ def test_prefer_employer_and_candidate_evidence(monkeypatch):
 def test_retrieval_role_aliases_broad_queries_and_keyword_matches(monkeypatch):
     from backend.db import Chunk, Experience
     with TestClient(main.app), Session.begin() as db:
-        approved = Experience(company="  Retrieval Labs  ", role="Digital Specialist Engineer",
+        approved = Experience(company="  Retrieval Labs  ", role="Digital Specialist Engineer (DSE)",
                               status="approved", content={"title": "Technical interview"})
         pending = Experience(company="Retrieval Labs", role="DSE", status="pending", content={"title": "Private"})
         other = Experience(company="Other Labs", role="DSE", status="approved", content={"title": "Other employer"})
@@ -436,5 +436,21 @@ def test_retrieval_role_aliases_broad_queries_and_keyword_matches(monkeypatch):
         for query in ("Frequent questions", "PostgreSQL", "Interview process"):
             sources = coach.retrieve(db, "retrieval   labs", " dse ", query)
             assert [source["id"] for source in sources] == [approved.id]
+            for role in ("Digital Specialist Engineer", "Digital Specialist Engineer (DSE)"):
+                assert coach.retrieve(db, "Retrieval Labs", role, query) == sources
         assert coach.retrieve(db, "Retrieval Labs", "Accountant", "PostgreSQL") == []
         assert coach.retrieve(db, "Retrieval Labs", "DSE", "photosynthesis") == []
+
+
+def test_public_search_uses_same_role_for_abbreviations(monkeypatch):
+    from backend import web_sources
+    from backend.roles import normalized_role
+    calls = []
+    def search(company, role, query):
+        calls.append((company, role, query))
+        return []
+    monkeypatch.setattr(web_sources, "search_public_platforms", search)
+    for role in ("DSE", "Digital Specialist Engineer", "Digital Specialist Engineer (DSE)"):
+        web_sources.public_references(" Infosys ", role, "Questions?")
+    assert calls == [("infosys", "digital specialist engineer", "Questions?")] * 3
+    assert normalized_role("Software Development Engineer 1") != normalized_role("SDE")

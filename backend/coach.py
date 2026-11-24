@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from .db import Chunk, DEMO, Experience
+from .roles import normalized_name, normalized_role
 
 log = logging.getLogger(__name__)
 ALIASES = {
@@ -356,22 +357,6 @@ def index_experience(db, experience):
     texts = [" ".join(words[start:start + 150]) for start in range(0, len(words), 120)]
     db.add_all(Chunk(experience_id=experience.id, text=value, embedding=vector)
                for value, vector in zip(texts, embed(texts), strict=True))
-
-
-def normalized_name(value):
-    return " ".join(re.findall(r"[\w+]+", value.casefold()))
-
-
-def normalized_role(value):
-    value = normalized_name(value)
-    for aliases in (
-        {"dse", "digital specialist engineer"},
-        {"sde", "software development engineer"},
-        {"mle", "machine learning engineer"},
-    ):
-        if value in aliases:
-            return sorted(aliases, key=len)[-1]
-    return value
 
 
 def retrieve(db, company, role, query):
