@@ -1,6 +1,6 @@
 import React, {useEffect, useState, type FormEvent, type ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
-import {LayoutGrid, Target as TargetIcon, Code2, ListChecks, MessageSquareText, AudioLines, BookOpenText, CalendarDays, ChartNoAxesCombined, UserRound, LogOut, Sparkles, BriefcaseBusiness, Menu, Check, Upload, GraduationCap, Search, ShieldCheck} from 'lucide-react';
+import {LayoutGrid, Target as TargetIcon, Code2, ListChecks, MessageSquareText, AudioLines, BookOpenText, CalendarDays, ChartNoAxesCombined, UserRound, LogOut, Sparkles, BriefcaseBusiness, Menu, Check, Upload, GraduationCap, Search, ShieldCheck, Eye, EyeOff} from 'lucide-react';
 import {api, type Catalog, type Experience, type Feedback, type Gap, type Interview, type Report, type Roadmap, type SearchResult, type Source, type User} from './api';
 import './styles.css';
 import {DynamicTests} from './DynamicTests';
@@ -66,7 +66,7 @@ function Auth({onUser}: {onUser: (user: User) => void}) {
         <label>Email<input name="email" type="email" autoComplete="email" required/></label>
         <label htmlFor="auth-password">Password</label>
         <div className="password-field"><input id="auth-password" name="password" type={showPassword ? 'text' : 'password'} autoComplete={register ? 'new-password' : 'current-password'} minLength={8} maxLength={128} required/>
-          <button type="button" className="secondary" aria-controls="auth-password" aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? 'Hide' : 'Show'} password</button></div>
+          <button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} title={showPassword ? 'Hide password' : 'Show password'} aria-controls="auth-password" aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff size={20} aria-hidden="true"/> : <Eye size={20} aria-hidden="true"/>}</button></div>
         {register && <label>Account type<select name="role"><option value="student">Student preparing for placements</option><option value="senior">Senior sharing experiences</option></select></label>}
         <Alert text={action.error}/><button disabled={action.busy}>{action.busy ? 'Please wait…' : register ? 'Create account' : 'Sign in'}</button>
       </form>
