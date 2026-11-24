@@ -200,9 +200,10 @@ def login(data: Credentials, db: Db, response: Response, request: Request):
     try:
         PASSWORDS.verify(user.password if user else DUMMY_PASSWORD, data.password)
     except VerifyMismatchError:
-        raise HTTPException(401, "Email or password is incorrect.") from None
+        message = "Email or password is incorrect." if user else "No account found. Please create an account."
+        raise HTTPException(401, message) from None
     if not user:
-        raise HTTPException(401, "Email or password is incorrect.")
+        raise HTTPException(401, "No account found. Please create an account.")
     if PASSWORDS.check_needs_rehash(user.password):
         user.password = PASSWORDS.hash(data.password)
     return sign_in(db, user, response, request)

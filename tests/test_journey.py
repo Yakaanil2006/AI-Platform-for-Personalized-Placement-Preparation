@@ -42,6 +42,24 @@ def resume_pdf():
     return output.getvalue()
 
 
+def test_missing_login_prompts_registration_without_creating_user():
+    from sqlalchemy import select
+    credentials = {"email": "missing-login@example.test", "password": "demo-password"}
+    with TestClient(main.app) as client:
+        result = request(client, "POST", "/auth/login", 401, json=credentials)
+        assert result["detail"] == "No account found. Please create an account."
+        request(client, "GET", "/profile", 401)
+        with Session() as db:
+            assert db.scalar(select(User).where(User.email == credentials["email"])) is None
+        registered = request(client, "POST", "/auth/register", 201,
+                             json={**credentials, "name": "New Student", "role": "student"})
+        request(client, "POST", "/auth/logout", 204)
+        wrong = request(client, "POST", "/auth/login", 401,
+                        json={**credentials, "password": "wrong-password"})
+        assert wrong["detail"] == "Email or password is incorrect."
+        assert request(client, "POST", "/auth/login", json=credentials)["id"] == registered["id"]
+
+
 def test_student_journey():
     with TestClient(main.app) as client:
         student = account(client, "student")

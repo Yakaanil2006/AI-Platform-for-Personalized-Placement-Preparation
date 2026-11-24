@@ -23,7 +23,7 @@ function useAction() {
     try {await action();} catch (failure) {setError(failure instanceof Error ? failure.message : 'Something went wrong.');}
     finally {setBusy(false);}
   }
-  return {run, busy, error};
+  return {run, busy, error, clearError: () => setError('')};
 }
 
 function useLoad<T>(path: string | null) {
@@ -70,7 +70,7 @@ function Auth({onUser}: {onUser: (user: User) => void}) {
         {register && <label>Account type<select name="role"><option value="student">Student preparing for placements</option><option value="senior">Senior sharing experiences</option></select></label>}
         <Alert text={action.error}/><button disabled={action.busy}>{action.busy ? 'Please wait…' : register ? 'Create account' : 'Sign in'}</button>
       </form>
-      <button className="text-button" onClick={() => {setRegister(!register); setShowPassword(false);}}>{register ? 'Already have an account? Sign in' : 'New here? Create an account'}</button>
+      <button className={!register && action.error === 'No account found. Please create an account.' ? 'secondary' : 'text-button'} onClick={() => {setRegister(!register); setShowPassword(false); action.clearError();}}>{register ? 'Already have an account? Sign in' : action.error === 'No account found. Please create an account.' ? 'Create account' : 'New here? Create an account'}</button>
     </Card></div></main>;
 }
 
