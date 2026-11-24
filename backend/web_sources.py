@@ -1,13 +1,15 @@
 """Bounded public-reference tools for gaps in the reviewed experience corpus."""
 import hashlib
 import logging
+import os
+import ipaddress
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from functools import lru_cache
 from html.parser import HTMLParser
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlencode, urlunparse
 from urllib.robotparser import RobotFileParser
 
 import httpx
@@ -47,6 +49,86 @@ CATALOG = {
     },
 }
 ALLOWED_HOSTS = {urlparse(item["url"]).hostname for item in CATALOG.values()}
+
+SEARCH_GROUPS = (
+    ("LeetCode Discuss", ("leetcode.com",), "interview experience discuss"),
+    ("GeeksforGeeks", ("geeksforgeeks.org",), "interview experience"),
+    ("Glassdoor", ("glassdoor.com", "glassdoor.co.in"), "interview reviews questions"),
+    ("AmbitionBox", ("ambitionbox.com",), "interview questions experience"),
+    ("Reddit", ("reddit.com",), "interview experience (leetcode OR developersIndia)"),
+    ("InterviewBit", ("interviewbit.com",), "interview experience questions"),
+    ("Public engineering and candidate blogs", (), "engineering candidate blog interview experience"),
+    ("Other public sources", (), "interview experience preparation rounds questions"),
+)
+
+
+def public_result_url(url):
+    """Validate links returned by search; arbitrary result URLs are never fetched by this app."""
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower()
+    if parsed.scheme != "https" or parsed.username or parsed.password or parsed.port not in (None, 443):
+        raise ValueError("Unsupported search result URL")
+    if not host or "." not in host or host.endswith((".local", ".localhost", ".internal", ".test")):
+        raise ValueError("Non-public result URL")
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        raise ValueError("IP result URLs are unsupported")
+    return urlunparse(parsed._replace(fragment=""))
+
+
+@lru_cache(maxsize=128)
+def search_platform_tool(company, role, query, group_index, cache_bucket):
+    """Search one source family through Tavily, exposing indexed excerpts only."""
+    publisher, domains, suffix = SEARCH_GROUPS[group_index]
+    search_query = f'"{company}" {role} {query} {suffix}'[:1000]
+    link = "https://www.google.com/search?" + urlencode({"q": search_query + (" site:" + domains[0] if domains else "")})
+    unavailable = [{"title": f"Search {publisher}", "url": link, "publisher": publisher,
+                    "category": "Platform search", "scope": "Search link only; no page content was retrieved.",
+                    "excerpt": "", "available": False, "fetched_at": None}]
+    key = os.getenv("TAVILY_API_KEY", "")
+    if not key:
+        return unavailable
+    try:
+        with httpx.Client(timeout=httpx.Timeout(8, connect=3)) as client:
+            response = client.post("https://api.tavily.com/search", headers={"Authorization": "Bearer " + key},
+                json={"query": search_query, "search_depth": "basic", "max_results": 2,
+                      "include_domains": list(domains), "include_answer": False, "include_raw_content": False})
+            response.raise_for_status()
+            data = response.json()
+        results = []
+        company_tokens = set(re.findall(r"\w+", company.casefold()))
+        for item in data.get("results", [])[:2]:
+            try:
+                url = public_result_url(item.get("url", ""))
+                host = urlparse(url).hostname
+                if domains and not any(host == d or host.endswith("." + d) for d in domains):
+                    continue
+            except (ValueError, TypeError):
+                continue
+            title, content = str(item.get("title", "")), str(item.get("content", ""))
+            text_tokens = set(re.findall(r"\w+", (title + " " + content).casefold()))
+            if not company_tokens or not company_tokens <= text_tokens or len(content.strip()) < 40:
+                continue
+            results.append({"title": title[:250] or host, "url": url, "publisher": publisher if domains else host,
+                "category": "Candidate/community report" if group_index in (0, 2, 3, 4) else "Public web reference",
+                "scope": "Search-index excerpt only; full page not read. Role and level may differ. Candidate reports are anecdotal, not employer-confirmed questions.",
+                "excerpt": " ".join(content.split()[:160]), "available": True,
+                "fetched_at": datetime.now(timezone.utc).isoformat()})
+        return results or unavailable
+    except (httpx.HTTPError, ValueError, TypeError, AttributeError):
+        log.info("Public platform search unavailable for %s", publisher)
+        return unavailable
+
+
+def search_public_platforms(company, role, query):
+    bucket = int(time.time() // 600)
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        groups = list(executor.map(lambda i: search_platform_tool(company, role, query, i, bucket), range(len(SEARCH_GROUPS))))
+    # Keep one source per group before adding extras, so one platform cannot dominate.
+    return [group[0] for group in groups if group] + [item for group in groups for item in group[1:]][:2]
 
 
 def reference_catalog_tool(company, role, query):
@@ -174,6 +256,7 @@ def fetch_reference_tool(url, cache_bucket):
 
 def public_references(company, role, query):
     """Return fetched excerpts plus explicit link-only entries when unavailable."""
+    discovered = search_public_platforms(company, role, query)
     catalog = reference_catalog_tool(company, role, query)
     bucket = int(time.time() // 600)
     with ThreadPoolExecutor(max_workers=3) as executor:
@@ -191,4 +274,11 @@ def public_references(company, role, query):
             **item, "excerpt": excerpt, "sample": False, "kind": "web",
             "available": bool(excerpt), "fetched_at": page["fetched_at"] if page else None,
         })
+    seen = {source["url"] for source in sources}
+    for item in discovered:
+        if item["url"] in seen:
+            continue
+        seen.add(item["url"])
+        sources.append({"id": "web-" + hashlib.sha256(item["url"].encode()).hexdigest()[:16],
+                        **item, "sample": False, "kind": "web"})
     return sources

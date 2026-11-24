@@ -347,6 +347,48 @@ def test_public_reference_tools_restrict_access():
     assert not any("Navigation" in block or "Ignore" in block for block in parser.blocks)
 
 
+def test_multiplatform_search_and_partial_failure(monkeypatch):
+    import httpx
+    from backend import web_sources
+    calls = []
+    class SearchClient:
+        def __init__(self, **kwargs): pass
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def post(self, url, headers, json):
+            calls.append(json)
+            assert url == "https://api.tavily.com/search"
+            assert headers["Authorization"] == "Bearer test-search-key"
+            assert not json["include_answer"] and not json["include_raw_content"]
+            domains = json["include_domains"]
+            if "glassdoor.com" in domains:
+                return httpx.Response(429, request=httpx.Request("POST", url))
+            host = domains[0] if domains else "engineering.example.com"
+            return httpx.Response(200, request=httpx.Request("POST", url), json={"results": [
+                {"url": "https://127.0.0.1/private", "title": "Example", "content": "Private content should never be accepted as search evidence."},
+                {"url": f"https://{host}/interview", "title": "Example software engineer interview",
+                 "content": "An Example candidate reported a coding discussion about arrays and trees during their software engineer interview."}]})
+    web_sources.search_platform_tool.cache_clear()
+    monkeypatch.setenv("TAVILY_API_KEY", "test-search-key")
+    monkeypatch.setattr(web_sources.httpx, "Client", SearchClient)
+    sources = web_sources.search_public_platforms("Example", "Software Engineer", "Questions")
+    assert len(calls) == 8
+    assert any("leetcode.com" in call["include_domains"] for call in calls)
+    assert any("reddit.com" in call["include_domains"] for call in calls)
+    assert any(not call["include_domains"] for call in calls)
+    assert any(source["available"] and source["publisher"] == "LeetCode Discuss" for source in sources)
+    assert any(not source["available"] and source["publisher"] == "Glassdoor" for source in sources)
+    assert all("127.0.0.1" not in source["url"] for source in sources)
+    web_sources.search_public_platforms("Example", "Software Engineer", "Questions")
+    assert len(calls) == 8  # Repeat requests use cached results.
+    web_sources.search_platform_tool.cache_clear()
+    monkeypatch.delenv("TAVILY_API_KEY")
+    sources = web_sources.search_public_platforms("Example", "Software Engineer", "Questions")
+    assert len(sources) == 8 and not any(source["available"] for source in sources)
+    assert len(calls) == 8  # No credential means no search-provider request.
+    web_sources.search_platform_tool.cache_clear()
+
+
 def test_retrieval_role_aliases_broad_queries_and_keyword_matches(monkeypatch):
     from backend.db import Chunk, Experience
     with TestClient(main.app), Session.begin() as db:
