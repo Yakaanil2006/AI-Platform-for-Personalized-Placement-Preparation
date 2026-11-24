@@ -347,22 +347,69 @@ def index_experience(db, experience):
                for value, vector in zip(texts, embed(texts), strict=True))
 
 
+def normalized_name(value):
+    return " ".join(re.findall(r"[\w+]+", value.casefold()))
+
+
+def normalized_role(value):
+    value = normalized_name(value)
+    for aliases in (
+        {"dse", "digital specialist engineer"},
+        {"sde", "software development engineer"},
+        {"mle", "machine learning engineer"},
+    ):
+        if value in aliases:
+            return sorted(aliases, key=len)[-1]
+    return value
+
+
 def retrieve(db, company, role, query):
-    from sqlalchemy import func
+    # Match metadata before ranking: never mix employers or unrelated roles.
+    ids = [row.id for row in db.execute(select(Experience.id, Experience.company, Experience.role).where(
+        Experience.status == "approved"
+    )) if normalized_name(row.company) == normalized_name(company)
+        and normalized_role(row.role) == normalized_role(role)]
+    if not ids:
+        return []
     stmt = select(Chunk, Experience).join(Experience).where(
-        Experience.status == "approved", func.lower(Experience.company) == company.lower(),
-        func.lower(Experience.role) == role.lower(),
+        Experience.status == "approved", Experience.id.in_(ids),
     )
     if not db.execute(stmt.limit(1)).first():
         return []
     vector = embed([query])[0]
+    def similarity(row):
+        return sum(a * b for a, b in zip(row[0].embedding, vector, strict=True))
+
     if DEMO:
-        def similarity(row):
-            return sum(a * b for a, b in zip(row[0].embedding, vector, strict=True))
-        pairs = sorted(db.execute(stmt), key=similarity, reverse=True)
-        pairs = [row for row in pairs[:5] if similarity(row) >= 0.03]
+        semantic = sorted(db.execute(stmt), key=similarity, reverse=True)[:30]
     else:
         distance = Chunk.embedding.cosine_distance(vector)
-        pairs = db.execute(stmt.where(distance <= 0.75).order_by(distance, Chunk.id).limit(5)).all()
+        semantic = db.execute(stmt.order_by(distance, Chunk.id).limit(30)).all()
+    tokens = set(normalized_name(query).split()) - {"the", "a", "an", "for", "of", "to", "and", "in", "what", "are", "is"}
+    # Keyword retrieval complements embeddings for acronyms and exact technical terms.
+    from sqlalchemy import or_
+    lexical = list(db.execute(stmt.where(or_(*[Chunk.text.ilike("%" + token + "%") for token in sorted(tokens)])))) if tokens else []
+    def overlap(row):
+        return len(tokens & set(normalized_name(row[0].text).split()))
+    lexical = sorted((row for row in lexical if overlap(row)), key=lambda row: (-overlap(row), row[0].id))[:30]
+    broad = bool(tokens) and tokens <= {"interview", "interviews", "experience", "experiences", "process", "round", "rounds", "questions", "frequent", "frequently", "asked", "planning", "preparation", "tips", "overview", "hiring", "recruitment", "prepare"}
+    scores, candidates = {}, {}
+    for ranking in (semantic, lexical):
+        for rank, row in enumerate(ranking, 1):
+            key = row[0].id
+            candidates[key] = row
+            scores[key] = scores.get(key, 0) + 1 / (60 + rank)
+    pairs, seen = [], set()
+    for key in sorted(scores, key=lambda key: (-scores[key], key)):
+        row = candidates[key]
+        if not broad and not overlap(row) and similarity(row) < (0.03 if DEMO else 0.25):
+            continue
+        text = normalized_name(row[0].text)
+        if text in seen:
+            continue
+        seen.add(text)
+        pairs.append(row)
+        if len(pairs) == 5:
+            break
     return [dict(id=exp.id, title=exp.content["title"], excerpt=chunk.text, sample=exp.sample)
             for chunk, exp in pairs]

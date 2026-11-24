@@ -57,17 +57,20 @@ function Loading({show}: {show: boolean}) {return show ? <p role="status" classN
 
 function Auth({onUser}: {onUser: (user: User) => void}) {
   const [register, setRegister] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const action = useAction();
   return <main className="auth"><div className="auth-intro"><Logo/><div><p className="eyebrow">YOUR PLACEMENT WORKSPACE</p><h1>Build confidence for your next interview.</h1><p>Find your skill gaps, practice with an adaptive AI coach, and learn from senior interview experiences.</p></div></div>
     <div className="auth-form"><Card title={register ? 'Create your account' : 'Sign in'}>
       <form onSubmit={event => {const payload = values(event); void action.run(async () => onUser(await api<User>('/auth/' + (register ? 'register' : 'login'), 'POST', payload)));}}>
         {register && <label>Name<input name="name" autoComplete="name" required maxLength={100}/></label>}
         <label>Email<input name="email" type="email" autoComplete="email" required/></label>
-        <label>Password<input name="password" type="password" autoComplete={register ? 'new-password' : 'current-password'} minLength={8} maxLength={128} required/></label>
+        <label htmlFor="auth-password">Password</label>
+        <div className="password-field"><input id="auth-password" name="password" type={showPassword ? 'text' : 'password'} autoComplete={register ? 'new-password' : 'current-password'} minLength={8} maxLength={128} required/>
+          <button type="button" className="secondary" aria-controls="auth-password" aria-pressed={showPassword} onClick={() => setShowPassword(value => !value)}>{showPassword ? 'Hide' : 'Show'} password</button></div>
         {register && <label>Account type<select name="role"><option value="student">Student preparing for placements</option><option value="senior">Senior sharing experiences</option></select></label>}
         <Alert text={action.error}/><button disabled={action.busy}>{action.busy ? 'Please wait…' : register ? 'Create account' : 'Sign in'}</button>
       </form>
-      <button className="text-button" onClick={() => setRegister(!register)}>{register ? 'Already have an account? Sign in' : 'New here? Create an account'}</button>
+      <button className="text-button" onClick={() => {setRegister(!register); setShowPassword(false);}}>{register ? 'Already have an account? Sign in' : 'New here? Create an account'}</button>
     </Card></div></main>;
 }
 

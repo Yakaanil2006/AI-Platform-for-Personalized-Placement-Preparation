@@ -296,3 +296,25 @@ def test_public_reference_tools_restrict_access():
     parser.flush()
     assert "Cross-validation evaluates generalization." in parser.blocks
     assert not any("Navigation" in block or "Ignore" in block for block in parser.blocks)
+
+
+def test_retrieval_role_aliases_broad_queries_and_keyword_matches(monkeypatch):
+    from backend.db import Chunk, Experience
+    with TestClient(main.app), Session.begin() as db:
+        approved = Experience(company="  Retrieval Labs  ", role="Digital Specialist Engineer",
+                              status="approved", content={"title": "Technical interview"})
+        pending = Experience(company="Retrieval Labs", role="DSE", status="pending", content={"title": "Private"})
+        other = Experience(company="Other Labs", role="DSE", status="approved", content={"title": "Other employer"})
+        db.add_all([approved, pending, other])
+        db.flush()
+        vector = [1.0] + [0.0] * 383
+        for exp in (approved, pending, other):
+            db.add(Chunk(experience_id=exp.id, text="Explain PostgreSQL query optimization.", embedding=vector))
+        db.flush()
+        # A zero semantic score must not discard exact keyword or broad metadata matches.
+        monkeypatch.setattr(coach, "embed", lambda texts: [[0.0, 1.0] + [0.0] * 382 for _ in texts])
+        for query in ("Frequent questions", "PostgreSQL", "Interview process"):
+            sources = coach.retrieve(db, "retrieval   labs", " dse ", query)
+            assert [source["id"] for source in sources] == [approved.id]
+        assert coach.retrieve(db, "Retrieval Labs", "Accountant", "PostgreSQL") == []
+        assert coach.retrieve(db, "Retrieval Labs", "DSE", "photosynthesis") == []
