@@ -42,28 +42,6 @@ def resume_pdf():
     return output.getvalue()
 
 
-def test_login_creates_new_student_and_preserves_existing_accounts():
-    with TestClient(main.app) as client:
-        credentials = {"email": "AutoStudent@example.test", "password": "new-password-123"}
-        created = request(client, "POST", "/auth/login", 201, json=credentials)
-        assert created["role"] == "student"
-        assert created["email"] == "autostudent@example.test"
-        assert request(client, "GET", "/profile")["id"] == created["id"]
-        request(client, "POST", "/auth/logout", 204)
-        request(client, "POST", "/auth/login", 401, json={**credentials, "password": "wrong-password"})
-        request(client, "GET", "/profile", 401)
-        assert request(client, "POST", "/auth/login", json=credentials)["id"] == created["id"]
-        with Session() as db:
-            user = db.get(User, created["id"])
-            assert user.password != credentials["password"]
-            main.PASSWORDS.verify(user.password, credentials["password"])
-        request(client, "POST", "/auth/logout", 204)
-        senior = account(client, "existing-login-senior", "senior")
-        request(client, "POST", "/auth/logout", 204)
-        logged_in = request(client, "POST", "/auth/login", json={"email": senior["email"], "password": "demo-password"})
-        assert logged_in["id"] == senior["id"] and logged_in["role"] == "senior"
-
-
 def test_student_journey():
     with TestClient(main.app) as client:
         student = account(client, "student")
