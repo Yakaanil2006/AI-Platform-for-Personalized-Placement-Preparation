@@ -591,6 +591,41 @@ class QuestionBatch(Input):
     questions: list[TestQuestion] = Field(min_length=1, max_length=50)
 
 
+class AptitudeCheck(Input):
+    index: int = Field(ge=0, le=4)
+    valid: bool
+    correct: int | None = Field(default=None, ge=0, le=3)
+    explanation: str = Field(min_length=1, max_length=2000)
+
+
+class AptitudeChecks(Input):
+    checks: list[AptitudeCheck] = Field(min_length=1, max_length=5)
+
+
+def verify_aptitude(questions):
+    if not questions:
+        return []
+    from .coach import generate
+    result = generate(AptitudeChecks,
+        "Independently solve each aptitude question from its prompt and choices. Do not assume an answer key. "
+        "Check arithmetic, units, grammar and assumptions. Return one check per zero-based question index. "
+        "Set valid=true only if the prompt is unambiguous and exactly one choice is correct. "
+        "If the computed answer is absent or multiple choices are correct, set valid=false and correct=null. "
+        "For valid questions return the zero-based correct choice and a worked explanation that ends with "
+        "that exact choice text. Never choose the nearest number or force an incorrect option.",
+        {"questions": [{"index": i, "prompt": q["prompt"], "choices": q["choices"]} for i, q in enumerate(questions)]},
+        lambda: {"checks": [{"index": i, "valid": True, "correct": q["correct"], "explanation": q["explanation"]} for i, q in enumerate(questions)]})
+    checks = result["checks"]
+    if len(checks) != len(questions) or {c["index"] for c in checks} != set(range(len(questions))):
+        raise HTTPException(503, "Answer verification was incomplete. Please retry.")
+    verified = []
+    for check in sorted(checks, key=lambda c: c["index"]):
+        question = questions[check["index"]]
+        if check["valid"] and check["correct"] is not None:
+            verified.append({**question, "correct": check["correct"], "explanation": check["explanation"], "answer_verified": True})
+    return verified
+
+
 class TestRequest(Input):
     aptitude_mode: Literal["target", "general"] = "target"
     difficulty: Literal["easy", "medium", "hard", "mixed"] = "mixed"
@@ -603,7 +638,7 @@ def test_view(record):
     data = record.data
     return {"id": record.id, "kind": data["kind"],
             "language": data.get("language"),
-            "questions": [{key: value for key, value in question.items() if key not in {"correct", "explanation"}}
+            "questions": [{key: value for key, value in question.items() if key not in {"correct", "explanation", "answer_verified"}}
                           for question in data["questions"]],
             "results": data["results"], "complete": len(data["results"]) == len(data["questions"])}
 
@@ -652,6 +687,9 @@ def create_test(payload: TestRequest, db: Db, user: CurrentUser):
              "target": target["analysis"] if payload.kind != "aptitude" or payload.aptitude_mode == "target" else {},
              "previous_prompts": (excluded + [q["prompt"] for q in questions])[-250:], "variation": uuid4().hex}, lambda: {"questions": demo()["questions"][:batch_count]})
         batch_questions = batch["questions"]
+        if payload.kind == "aptitude":
+            batch_questions = verify_aptitude([q for q in batch_questions[:batch_count]
+                if len(q["choices"]) == 4 and len(set(q["choices"])) == 4 and q["correct"] is not None])
         for question in batch_questions:
             fingerprint = question["prompt"].strip().casefold()
             if fingerprint in seen:
@@ -691,8 +729,15 @@ def submit_test_answer(test_id: str, question_id: str, payload: AssessmentInput,
     if kind == "aptitude":
         if set(payload.answers) != {question_id}:
             raise HTTPException(422, "Select one answer.")
+        if not question.get("answer_verified"):
+            checked = verify_aptitude([question])
+            if not checked:
+                raise HTTPException(422, "This older question has ambiguous or invalid options. Please generate a new test.")
+            question = checked[0]
+            record.data = {**record.data, "questions": [question if q["id"] == question_id else q for q in record.data["questions"]]}
         result = {"score": 100 if payload.answers[question_id] == question["correct"] else 0,
-                  "explanation": question["explanation"], "correct_choice": question["correct"]}
+                  "explanation": question["explanation"], "correct_choice": question["correct"],
+                  "selected_choice": payload.answers[question_id]}
     else:
         if not payload.answer or (kind == "coding" and not payload.language):
             raise HTTPException(422, "Enter an answer and select a coding language.")

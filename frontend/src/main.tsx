@@ -230,7 +230,6 @@ function Experiences({user}: {user: User}) {
 function MockInterview() {
   const {data, setData, loading, error} = useLoad<Interview | null>('/interviews/current');
   const action = useAction();
-  const [source, setSource] = useState<string>();
   const question = data?.question;
   const last = data?.turns.at(-1);
   return <>
@@ -238,16 +237,15 @@ function MockInterview() {
       <Loading show={loading}/><Alert text={error || action.error}/>
       {!loading && !question && <>
         <p>{data?.score == null ? 'Practice five questions that adapt to your responses and draw on approved experiences when available.' : `Interview complete. Your score is ${data.score}%.`}</p>
-        <button disabled={action.busy} onClick={() => void action.run(async () => {setSource(undefined); setData(await api('/interviews','POST'));})}>{action.busy ? 'Starting…' : data ? 'Start another interview' : 'Start interview'}</button>
+        <button disabled={action.busy} onClick={() => void action.run(async () => {setData(await api('/interviews','POST'));})}>{action.busy ? 'Starting…' : data ? 'Start another interview' : 'Start interview'}</button>
       </>}
       {question && <><div className="tags"><Pill>{question.topic}</Pill><Pill>{question.difficulty}</Pill></div>
-        <p>{question.prompt}</p><SourceLinks sources={question.sources} onOpen={setSource}/>
+        <p>{question.prompt}</p>
         <form key={question.id} onSubmit={event => {const payload = values(event); void action.run(async () => {
-          const result = await api<Interview>(`/interviews/${data?.id}/answer`, 'POST', {...payload, question_id: question.id}); setSource(undefined); setData(result);
+          const result = await api<Interview>(`/interviews/${data?.id}/answer`, 'POST', {...payload, question_id: question.id}); setData(result);
         });}}><InterviewAnswer key={question.id} busy={action.busy}/></form>
       </>}
     </Card>
-    {source && <ExperienceDetails id={source} close={() => setSource(undefined)}/>}
     {question && last && <FeedbackCard feedback={last.feedback}/>}
     {!question && data?.turns.map(turn => <details className="card" key={turn.question.id}><summary>{turn.question.topic} · {turn.feedback.score}%</summary><p>{turn.question.prompt}</p><p>{turn.answer}</p><FeedbackCard feedback={turn.feedback}/></details>)}
   </>;

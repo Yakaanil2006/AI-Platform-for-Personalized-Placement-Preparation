@@ -262,6 +262,37 @@ def test_duplicate_questions_are_replaced(monkeypatch):
         assert [question["prompt"] for question in result["questions"]] == ["First question", "Second question"]
 
 
+def test_aptitude_verification_replaces_invalid_options_and_corrects_key(monkeypatch):
+    generation_calls = []
+    def generated(schema, instruction, payload, demo):
+        if schema is main.QuestionBatch:
+            generation_calls.append(payload)
+            return {"questions": [{"topic": "Quantitative", "prompt": "A train travels 120 km at 60 km/h and 180 km at 90 km/h. What is its average speed?",
+                "choices": ["72 km/h", "70 km/h", "80 km/h", "90 km/h"] if len(generation_calls) == 1 else ["72 km/h", "70 km/h", "75 km/h", "90 km/h"],
+                "correct": 0, "explanation": "Incorrect draft key."}]}
+        assert schema is main.AptitudeChecks
+        assert "correct" not in payload["questions"][0] and "explanation" not in payload["questions"][0]
+        valid = "75 km/h" in payload["questions"][0]["choices"]
+        return {"checks": [{"index": 0, "valid": valid, "correct": 2 if valid else None,
+                            "explanation": "Total distance is 300 km. Total time is 120/60 + 180/90 = 4 hours. Average speed = 300/4 = 75 km/h."}]}
+    with TestClient(main.app) as client:
+        account(client, "verified-aptitude")
+        request(client, "POST", "/job-descriptions", json={"company": "Example", "role": "Engineer", "description": "Required: Python"})
+        monkeypatch.setattr(coach, "generate", generated)
+        test = request(client, "POST", "/tests", 201, json={"kind": "aptitude", "count": 1})
+        assert len(generation_calls) == 2
+        question = test["questions"][0]
+        assert "correct" not in question and "answer_verified" not in question
+        payload = {"answers": {question["id"]: 2}}
+        path = f"/tests/{test['id']}/questions/{question['id']}/submit"
+        result = request(client, "POST", path, json=payload)
+        feedback = result["results"][question["id"]]
+        assert feedback["score"] == 100
+        assert feedback["selected_choice"] == feedback["correct_choice"] == 2
+        assert "75 km/h" in feedback["explanation"]
+        assert request(client, "POST", path, json={"answers": {question["id"]: 0}}) == result
+
+
 def test_public_reference_fallback(monkeypatch):
     from backend import web_sources
     source = {

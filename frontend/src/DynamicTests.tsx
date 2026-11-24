@@ -3,7 +3,7 @@ import {api, type Feedback} from './api';
 import {CodingPrompt} from './CodingPrompt';
 
 type Question = {id: string; topic: string; prompt: string; choices: string[]};
-type Test = {id: string; kind: string; language?: string | null; questions: Question[]; results: Record<string, Feedback & {correct_choice?: number}>; complete: boolean};
+type Test = {id: string; kind: string; language?: string | null; questions: Question[]; results: Record<string, Feedback & {correct_choice?: number; selected_choice?: number}>; complete: boolean};
 
 export function DynamicTests({kind}: {kind: 'coding' | 'aptitude' | 'communication'}) {
   const [tests, setTests] = useState<Test[]>([]);
@@ -57,17 +57,19 @@ export function DynamicTests({kind}: {kind: 'coding' | 'aptitude' | 'communicati
         const result = current.results[question.id];
         return <section className="result" key={question.id}><h3>Question {index + 1} · {question.topic}</h3><>{kind === 'coding' ? <CodingPrompt prompt={question.prompt}/> : <p className="preserve">{question.prompt}</p>}</>
           {result ? <><strong>{result.score}%</strong><p>{result.explanation}</p>
-            {result.correct_choice != null && <p>Correct answer · {question.choices[result.correct_choice]}</p>}
+            {result.correct_choice != null && <><p><strong>Your answer:</strong> {result.selected_choice != null ? `${String.fromCharCode(65 + result.selected_choice)}. ${question.choices[result.selected_choice]}` : 'Not recorded for this older attempt.'}</p>
+              <p><strong>Correct answer:</strong> {String.fromCharCode(65 + result.correct_choice)}. {question.choices[result.correct_choice]}</p>
+              <p>{result.selected_choice != null ? result.selected_choice === result.correct_choice ? 'Your selection is correct.' : 'Your selection is incorrect.' : ''}</p></>}
             {result.improvements?.map((text, i) => <p key={i}>{text}</p>)}</> :
           <form onSubmit={event => {
             event.preventDefault();
             const fields = Object.fromEntries(new FormData(event.currentTarget));
-            const payload = kind === 'aptitude' ? {answers: {[question.id]: Number(fields.choice)}} : fields;
+            const payload = kind === 'aptitude' ? {answers: {[question.id]: Number(fields.choice)}} : kind === 'coding' ? {...fields, language: current.language || language} : fields;
             void run(async () => update(await api<Test>('/tests/' + current.id + '/questions/' + question.id + '/submit', 'POST', payload)));
           }}>
             {kind === 'aptitude' ? <fieldset><legend>Select your answer</legend>{question.choices.map((choice, i) =>
-              <label className="radio" key={i}><input type="radio" name="choice" value={i} required disabled={busy}/>{choice}</label>)}</fieldset> :
-              <>{kind === 'coding' && <label>Language<select name="language" defaultValue={current.language || "Python"} disabled={busy}>{(current.language ? [current.language] : ['Python','Java','C++','JavaScript']).map(language => <option key={language}>{language}</option>)}</select></label>}
+              <label className="radio" key={i}><input type="radio" name="choice" value={i} required disabled={busy}/>{String.fromCharCode(65 + i)}. {choice}</label>)}</fieldset> :
+              <>
               <label>Your answer<textarea name="answer" required rows={6} maxLength={12000} disabled={busy}/></label></>}
             <button disabled={busy}>Submit answer</button>
           </form>}
