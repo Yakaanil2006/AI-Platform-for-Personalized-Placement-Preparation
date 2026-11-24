@@ -62,6 +62,27 @@ SEARCH_GROUPS = (
 )
 
 
+def source_category(url, title, content, company):
+    host = urlparse(url).hostname or ""
+    employers = {"amazon": {"amazon.jobs", "www.amazon.jobs"},
+                 "microsoft": {"careers.microsoft.com"}}
+    if host in employers.get(company.strip().casefold(), set()):
+        return "Employer guidance"
+    text = (title + " " + content).casefold()
+    reported = re.search(r"interview experience|interview review|candidate.{0,30}reported|my.{0,30}interview|i (?:was )?interviewed|on.campus|off.campus", text)
+    community = any(host == domain or host.endswith("." + domain) for domain in ("reddit.com", "glassdoor.com", "glassdoor.co.in", "ambitionbox.com"))
+    discussion = host.endswith("leetcode.com") and "/discuss" in urlparse(url).path
+    if reported or ((community or discussion) and "interview" in text):
+        return "Candidate/community report"
+    return "Public web reference"
+
+
+def prioritize_sources(sources):
+    """Readable employer/candidate evidence precedes generic resources and search links."""
+    priorities = {"Employer guidance": 0, "Candidate/community report": 1}
+    return sorted(sources, key=lambda source: (not source.get("available", True), priorities.get(source.get("category"), 2)))
+
+
 def public_result_url(url):
     """Validate links returned by search; arbitrary result URLs are never fetched by this app."""
     parsed = urlparse(url)
@@ -112,8 +133,9 @@ def search_platform_tool(company, role, query, group_index, cache_bucket):
             text_tokens = set(re.findall(r"\w+", (title + " " + content).casefold()))
             if not company_tokens or not company_tokens <= text_tokens or len(content.strip()) < 40:
                 continue
+            category = source_category(url, title, content, company)
             results.append({"title": title[:250] or host, "url": url, "publisher": publisher if domains else host,
-                "category": "Candidate/community report" if group_index in (0, 2, 3, 4) else "Public web reference",
+                "category": category,
                 "scope": "Search-index excerpt only; full page not read. Role and level may differ. Candidate reports are anecdotal, not employer-confirmed questions.",
                 "excerpt": " ".join(content.split()[:160]), "available": True,
                 "fetched_at": datetime.now(timezone.utc).isoformat()})
@@ -281,4 +303,4 @@ def public_references(company, role, query):
         seen.add(item["url"])
         sources.append({"id": "web-" + hashlib.sha256(item["url"].encode()).hexdigest()[:16],
                         **item, "sample": False, "kind": "web"})
-    return sources
+    return prioritize_sources(sources)

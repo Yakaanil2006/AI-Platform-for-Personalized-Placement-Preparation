@@ -389,6 +389,32 @@ def test_multiplatform_search_and_partial_failure(monkeypatch):
     web_sources.search_platform_tool.cache_clear()
 
 
+def test_prefer_employer_and_candidate_evidence(monkeypatch):
+    from backend.web_sources import prioritize_sources, source_category
+    assert source_category("https://www.geeksforgeeks.org/interview-experiences/example/", "Example interview experience", "Technical rounds", "Example") == "Candidate/community report"
+    assert source_category("https://www.interviewbit.com/sql-interview-questions/", "SQL interview questions", "Practice SQL joins", "Example") == "Public web reference"
+    assert source_category("https://www.amazon.jobs/preparation", "Preparation", "Guidance", "Amazon") == "Employer guidance"
+    assert source_category("https://unrelated.example.org/", "Amazon official guide", "General tips", "Amazon") == "Public web reference"
+    sources = [
+        {"id": "generic", "category": "Educational reference", "available": True, "excerpt": "Generic practice"},
+        {"id": "candidate", "category": "Candidate/community report", "available": True, "excerpt": "Candidate reported two coding rounds"},
+        {"id": "employer", "category": "Employer guidance", "available": True, "excerpt": "Employer recommends practicing algorithms"},
+        {"id": "blocked", "category": "Employer guidance", "available": False, "excerpt": ""},
+    ]
+    assert [source["id"] for source in prioritize_sources(sources)] == ["employer", "candidate", "generic", "blocked"]
+    captured = []
+    def generate(schema, instruction, payload, demo):
+        captured.append(payload["sources"])
+        return {"answer": "Candidate report [2] and employer guidance [3].", "citations": [1, 2, 3, 4]}
+    monkeypatch.setattr(coach, "generate", generate)
+    result = coach.guidance({"sources": sources, "query": "Questions"})
+    assert [source["id"] for source in captured[0]] == ["candidate", "employer"]
+    assert [source["position"] for source in captured[0]] == [2, 3]
+    assert result["citations"] == [2, 3]
+    coach.guidance({"sources": [sources[0], sources[3]], "query": "Questions"})
+    assert [source["id"] for source in captured[1]] == ["generic"]
+
+
 def test_retrieval_role_aliases_broad_queries_and_keyword_matches(monkeypatch):
     from backend.db import Chunk, Experience
     with TestClient(main.app), Session.begin() as db:
