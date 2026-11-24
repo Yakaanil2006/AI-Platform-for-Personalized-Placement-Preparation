@@ -196,7 +196,7 @@ function Experiences({user}: {user: User}) {
       <Alert text={search.error}/><button disabled={search.busy}><Search size={17}/>{search.busy ? 'Searching…' : 'Search experiences'}</button>
     </form>
       {result && <div className="result">{result.public_fallback && <p className="muted">No approved senior submissions matched. This guidance uses public references with their stated scope.</p>}
-      {result.public_fallback && result.public_search_enabled === false && <p className="muted">Live public search is not configured. Showing available references and links to search the platforms directly.</p>}
+      {result.public_fallback && result.public_search_enabled === false && <p className="muted">Live public search is not configured. Only available employer guidance and candidate/community reports are shown.</p>}
       <StudentGuidance answer={result.answer}/><SourceLinks sources={result.public_fallback ? result.sources : result.citations.map(i => result.sources[i - 1]).filter(Boolean)} onOpen={setSource}/></div>}
     </Card>}
     {user.role === 'senior' && <Card title="Share an interview experience"><form onSubmit={event => {

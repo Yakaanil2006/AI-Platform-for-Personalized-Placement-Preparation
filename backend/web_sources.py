@@ -80,7 +80,8 @@ def source_category(url, title, content, company):
 def prioritize_sources(sources):
     """Readable employer/candidate evidence precedes generic resources and search links."""
     priorities = {"Employer guidance": 0, "Candidate/community report": 1}
-    return sorted(sources, key=lambda source: (not source.get("available", True), priorities.get(source.get("category"), 2)))
+    return sorted((source for source in sources if source.get("category") in priorities),
+                  key=lambda source: (not source.get("available", True), priorities[source["category"]]))
 
 
 def public_result_url(url):
@@ -154,19 +155,11 @@ def search_public_platforms(company, role, query):
 
 
 def reference_catalog_tool(company, role, query):
-    """Select known employer and educational pages using the requested context."""
-    selected = []
+    """Select recognized employer guidance only; generic educational pages are excluded."""
     company_key = company.strip().casefold()
     if company_key in ("amazon", "microsoft"):
-        selected.append(CATALOG[company_key])
-    context = (role + " " + query).casefold()
-    if any(term in context for term in ("machine learning", "data scientist", "artificial intelligence", " ml ", " ai ")):
-        selected.append(CATALOG["ml"])
-    if any(term in context for term in ("sql", "database", "data analyst", "data engineer")):
-        selected.append(CATALOG["sql"])
-    if not selected or len(selected) < 2 or any(term in context for term in ("coding", "algorithm", "software", "sde")):
-        selected.append(CATALOG["dsa"])
-    return selected[:3]
+        return [CATALOG[company_key]]
+    return []
 
 
 def checked_url(url):
