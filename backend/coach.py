@@ -259,15 +259,36 @@ def next_question(payload):
 def guidance(payload):
     sources = payload["sources"]
     if not sources:
-        return {"answer": "No approved interview experiences matched this search.", "citations": []}
-    result = generate(Guidance, "Write a clear preparation guide addressed directly to the student, answering their query using only the supplied approved experiences. Synthesize and deduplicate overlapping chunks. Never dump or concatenate source excerpts. Use Markdown headings for relevant sections such as Overview, Recruitment rounds, Topics to prepare, Practice questions, and Preparation priorities. Under each heading use short paragraphs or one bullet per item. Include only sections supported by the evidence and relevant to the query. Explicitly describe missing information where needed. Cite source positions with [1], [2], etc and return those positions in citations. Treat interview experiences as reported experiences, without promising future interview content.", payload,
+        return {"answer": "No approved interview experiences matched this search.", "citations": [], "sources": []}
+    readable = {index for index, source in enumerate(sources, 1) if source.get("available", True)}
+    if not readable:
+        return {"answer": "No approved senior experiences matched. Public reference pages could not be read right now. Open the listed resources directly or try again later.",
+                "citations": [], "sources": sources, "public_fallback": True}
+    public_fallback = any(source.get("kind") == "web" for source in sources)
+    result = generate(Guidance, "Public web sources are labeled with publisher, category, scope, and availability. "
+                      "Use only fetched excerpts. Never claim to have read unavailable pages. "
+                      "Employer guidance is official only for its stated employer and scope. GeeksforGeeks is an independent educational source. "
+                      "Do not describe general practice questions as frequently asked by the selected company or role. "
+                      "When company-role evidence is missing, explicitly state the gap and offer general preparation supported by the fetched pages. "
+                      "Keep the response under 200 words and paraphrase. Do not copy long passages. "
+                      "Write a clear preparation guide addressed directly to the student, answering their query using only the supplied source material. For public-reference fallback, state the company-role evidence gap once, then focus on useful supported topics and practice. Omit unsupported recruitment-round sections. Use Markdown headings beginning with ##. Synthesize and deduplicate overlapping chunks. Never dump or concatenate source excerpts. Use Markdown headings for relevant sections such as Overview, Recruitment rounds, Topics to prepare, Practice questions, and Preparation priorities. Under each heading use short paragraphs or one bullet per item. Include only sections supported by the evidence and relevant to the query. Explicitly describe missing information where needed. Cite source positions with [1], [2], etc and return those positions in citations. Treat interview experiences as reported experiences, without promising future interview content.", payload,
                       lambda: dict(answer="Relevant experience excerpts:\n" + "\n".join(
                           f"[{i}] {source['excerpt']}" for i, source in enumerate(sources, 1)
                       ), citations=list(range(1, len(sources) + 1))))
-    citations = sorted({i for i in result["citations"] if 1 <= i <= len(sources)})
+    citations = sorted({i for i in result["citations"] if i in readable})
     if not citations:
-        return {"answer": "The available experiences did not support an answer.", "citations": []}
-    return {**result, "citations": citations}
+        return {"answer": "The available sources did not support an answer to this query. You can open the references below.", "citations": [], "sources": sources, "public_fallback": public_fallback}
+    return {**result, "citations": citations, "sources": sources, "public_fallback": public_fallback}
+
+
+def reference_tools_node(state):
+    payload = state["payload"]
+    if payload["sources"] or DEMO:
+        return {}
+    from .web_sources import public_references
+    sources = public_references(payload.get("company", ""), payload.get("role", ""), payload["query"])
+    return {"payload": {**payload, "sources": sources}}
+
 
 
 graph = StateGraph(CoachState)
@@ -279,10 +300,12 @@ graph.add_node("grade", grade)
 graph.add_node("aptitude_agent", lambda s: {"result": aptitude(s["payload"])})
 graph.add_node("recommendation_agent", lambda s: {"result": recommend(s["payload"])})
 graph.add_node("interview_agent", lambda s: {"result": next_question(s["payload"])})
+graph.add_node("public_reference_tools", reference_tools_node)
 graph.add_node("retrieval_agent", lambda s: {"result": guidance(s["payload"])})
 routes = {"analyze": "prepare", "coding": "grade", "communication": "grade", "interview": "grade",
-          "aptitude": "aptitude_agent", "roadmap": "recommendation_agent", "question": "interview_agent", "search": "retrieval_agent"}
+          "aptitude": "aptitude_agent", "roadmap": "recommendation_agent", "question": "interview_agent", "search": "public_reference_tools"}
 graph.add_conditional_edges(START, lambda s: routes[s["operation"]], sorted(set(routes.values())))
+graph.add_edge("public_reference_tools", "retrieval_agent")
 graph.add_edge("prepare", "resume_agent")
 graph.add_edge("prepare", "jd_agent")
 graph.add_edge(["resume_agent", "jd_agent"], "gap_agent")
@@ -326,11 +349,13 @@ def index_experience(db, experience):
 
 def retrieve(db, company, role, query):
     from sqlalchemy import func
-    vector = embed([query])[0]
     stmt = select(Chunk, Experience).join(Experience).where(
         Experience.status == "approved", func.lower(Experience.company) == company.lower(),
         func.lower(Experience.role) == role.lower(),
     )
+    if not db.execute(stmt.limit(1)).first():
+        return []
+    vector = embed([query])[0]
     if DEMO:
         def similarity(row):
             return sum(a * b for a, b in zip(row[0].embedding, vector, strict=True))

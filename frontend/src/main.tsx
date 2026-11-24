@@ -157,7 +157,13 @@ function StudentGuidance({answer}: {answer: string}) {
 function SourceLinks({sources, onOpen}: {sources: Source[]; onOpen: (id: string) => void}) {
   const unique = sources.filter((source, index) => sources.findIndex(item => item.id === source.id) === index);
   return <details className="sources"><summary>Sources ({unique.length})</summary>{unique.map(source =>
-    <div key={source.id}><button className="text-button" onClick={() => onOpen(source.id)}>{source.title}</button>
+    <div key={source.id}>{source.url
+        ? <a className="text-button" href={source.url} target="_blank" rel="noopener noreferrer">[{sources.findIndex(item => item.id === source.id) + 1}] {source.title}</a>
+        : <button className="text-button" onClick={() => onOpen(source.id)}>{source.title}</button>}
+      {source.category && <Pill>{source.category}</Pill>}
+      {source.publisher && <p className="muted">{source.publisher}{source.available === false ? ' · Link only — page unavailable' : ''}</p>}
+      {source.scope && <p className="muted">{source.scope}</p>}
+      {source.fetched_at && <p className="muted">Retrieved {new Date(source.fetched_at).toLocaleDateString()}</p>}
       {source.sample && <Pill>Demo sample</Pill>}</div>)}</details>;
 
 }
@@ -186,7 +192,8 @@ function Experiences({user}: {user: User}) {
       <label>What would you like to know?<input name="q" required maxLength={1000} placeholder="What tree traversal questions came up?"/></label>
       <Alert text={search.error}/><button disabled={search.busy}><Search size={17}/>{search.busy ? 'Searching…' : 'Search experiences'}</button>
     </form>
-      {result && <div className="result"><StudentGuidance answer={result.answer}/><SourceLinks sources={result.citations.map(i => result.sources[i - 1])} onOpen={setSource}/></div>}
+      {result && <div className="result">{result.public_fallback && <p className="muted">No approved senior submissions matched. This guidance uses public references with their stated scope.</p>}
+      <StudentGuidance answer={result.answer}/><SourceLinks sources={result.public_fallback ? result.sources : result.citations.map(i => result.sources[i - 1]).filter(Boolean)} onOpen={setSource}/></div>}
     </Card>}
     {user.role === 'senior' && <Card title="Share an interview experience"><form onSubmit={event => {
       const form = event.currentTarget;

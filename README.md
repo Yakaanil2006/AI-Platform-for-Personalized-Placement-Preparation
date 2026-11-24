@@ -79,3 +79,9 @@ The integration tests use a temporary SQLite database. Dynamic tests generate qu
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+## Public preparation references
+
+When approved senior experiences do not match a student's search, the LangGraph public-reference node selects pages from a maintained catalog. It supports Amazon and Microsoft employer guidance plus GeeksforGeeks machine-learning, SQL, and data-structure preparation resources. Employer pages retain their stated scope. GeeksforGeeks is labeled as independent educational material.
+
+The tools fetch bounded HTTPS pages, respect published robot rules, exclude scripts and navigation, cache results for ten minutes, and return short source excerpts with links and retrieval dates. Blocked or unavailable pages appear as links only and are excluded from answer evidence. External content is used for student guidance and is not inserted into the approved senior experience corpus. This capability needs no additional API key. It searches the maintained resource catalog rather than the entire web.

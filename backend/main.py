@@ -394,7 +394,7 @@ def submit_experience(data: ExperienceInput, db: Db, user: CurrentUser):
 def search_experiences(db: Db, user: CurrentUser, company: Short, role: Short,
                        q: Annotated[str, Field(min_length=1, max_length=1000)]):
     sources = retrieve(db, company.strip(), role.strip(), q.strip())
-    return {**run("search", {"query": q, "sources": sources}), "sources": sources}
+    return run("search", {"query": q.strip(), "company": company.strip(), "role": role.strip(), "sources": sources})
 
 
 @app.get("/api/experiences/{experience_id}")
