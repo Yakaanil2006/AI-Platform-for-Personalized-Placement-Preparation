@@ -2,6 +2,8 @@
 
 An Intelligent AI Platform for Personalized Placement Preparation brings resume and job-description analysis, skill gaps, coding practice, aptitude tests, written communication, and adaptive mock interviews into one preparation workspace. Approved senior interview experiences feed company- and role-specific retrieval. Assessments inform a four-week roadmap and a weighted readiness report.
 
+The interface redesign follows [Unslop](https://github.com/heydamir/unslop) by Damir Sokolovsky ([@heydamir](https://x.com/heydamir)), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The adapted presentation uses a paper-and-ink study workspace, restrained green accents, consistent spacing, and responsive layouts. Application behavior and backend services are unchanged.
+
 ## Local demo
 
 On page opening, the frontend requests `/api/health` through Vercel to wake the Render backend before loading the session or login screen. A startup screen waits for JSON readiness, retries read-only health checks for up to 90 seconds, and offers a manual retry if the service remains unavailable. Each request times out after 15 seconds. Closing the page cancels startup retries. This does not keep the server awake indefinitely or prevent Render from sleeping after inactivity. Login and other write requests are never automatically replayed. Run the startup tests with `node --test tests/serverStartup.test.mjs` from `frontend` using Node.js 24 (or a Node.js version supporting TypeScript type stripping).

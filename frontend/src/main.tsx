@@ -1,6 +1,6 @@
 import React, {useEffect, useState, type FormEvent, type ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
-import {LayoutGrid, Target as TargetIcon, Code2, ListChecks, MessageSquareText, AudioLines, BookOpenText, CalendarDays, ChartNoAxesCombined, UserRound, LogOut, Sparkles, BriefcaseBusiness, Menu, Check, Upload, GraduationCap, Search, ShieldCheck, Eye, EyeOff} from 'lucide-react';
+import {LayoutGrid, Target as TargetIcon, Code2, ListChecks, MessageSquareText, AudioLines, BookOpenText, CalendarDays, ChartNoAxesCombined, UserRound, LogOut, BriefcaseBusiness, Menu, Check, Upload, GraduationCap, Search, ShieldCheck, Eye, EyeOff, ArrowUpRight} from 'lucide-react';
 import {api, type Catalog, type Experience, type Feedback, type Gap, type Interview, type Report, type Roadmap, type SearchResult, type Source, type User} from './api';
 import './styles.css';
 import {DynamicTests} from './DynamicTests';
@@ -60,8 +60,14 @@ function Auth({onUser}: {onUser: (user: User) => void}) {
   const [register, setRegister] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const action = useAction();
-  return <main className="auth"><div className="auth-intro"><Logo/><div><p className="eyebrow">YOUR PLACEMENT WORKSPACE</p><h1>Build confidence for your next interview.</h1><p>Find your skill gaps, practice with an adaptive AI coach, and learn from senior interview experiences.</p></div></div>
+  return <main className="auth"><div className="auth-intro"><Logo/><div className="auth-story"><p className="eyebrow">Your placement workspace</p><h1>Prepare for the role<br/> you want</h1><p>Understand your skill gaps, practice with an adaptive AI coach, and learn from senior interview experiences.</p>
+      <div className="preparation-outline"><p>Your preparation, connected</p><ol>
+        <li><span>01</span><div><strong>Start with your resume</strong><p>Match your skills to the role you’re working toward.</p></div></li>
+        <li><span>02</span><div><strong>Make room for practice</strong><p>Coding, aptitude, communication, and mock interviews.</p></div></li>
+        <li><span>03</span><div><strong>See where you stand</strong><p>A learning roadmap and readiness report built from your progress.</p></div></li>
+      </ol></div></div><p className="auth-footnote">A focused space for your next step</p></div>
     <div className="auth-form"><Card title={register ? 'Create your account' : 'Sign in'}>
+      <p className="auth-caption">{register ? 'Set up your placement preparation workspace.' : 'Continue your placement preparation.'}</p>
       <form onSubmit={event => {const payload = values(event); void action.run(async () => onUser(await api<User>('/auth/' + (register ? 'register' : 'login'), 'POST', payload)));}}>
         {register && <label>Name<input name="name" autoComplete="name" required maxLength={100}/></label>}
         <label>Email<input name="email" type="email" autoComplete="email" required/></label>
@@ -79,16 +85,16 @@ function Dashboard({user, navigate}: {user: User; navigate: (page: Page) => void
   const {data, error} = useLoad<Report>(user.target?.id ? '/reports/latest' : null);
   const name = user.name.split(' ')[0];
   return <>
-    <section className="hero"><div><span className="hero-label"><Sparkles size={15}/> YOUR AI PLACEMENT COACH</span><h1>Welcome, {name}.</h1>
+    <section className="hero"><div><span className="hero-label">Your preparation overview</span><h1>{name}’s next chapter</h1>
       <p>{user.target?.id ? `Preparing for ${user.target.role} at ${user.target.company}. Keep building evidence for your readiness report.` : 'Upload your resume and add a target role to get a preparation plan that reflects your skills.'}</p>
-      <button onClick={() => navigate(user.target?.id ? 'roadmap' : 'target')}>{user.target?.id ? 'View learning roadmap' : 'Set up your target'}</button></div>
-      <span className="hero-art" aria-hidden="true"><GraduationCap size={136} strokeWidth={0.85}/></span>
+      <button onClick={() => navigate(user.target?.id ? 'roadmap' : 'target')}>{user.target?.id ? 'View learning roadmap' : 'Set up your target'}<ArrowUpRight aria-hidden="true"/></button></div>
+      <aside className="preparation-progress" aria-label="Preparation evidence"><span>Preparation evidence</span><strong>{data?.coverage ?? 0}<span> / 5</span></strong><p>Readiness components available</p><div className="evidence-track" aria-hidden="true">{Array.from({length: 5}, (_, i) => <span key={i} data-complete={i < (data?.coverage ?? 0)}/>)}</div><span>Built from your preparation</span></aside>
     </section>
     <Alert text={error}/>
     <div className="stats">
-      <Card><span className="tile-icon"><TargetIcon size={21}/></span><p>Target company</p><strong>{user.target?.company || 'Set a target'}</strong></Card>
-      <Card><span className="tile-icon teal"><ListChecks size={21}/></span><p>Readiness components</p><strong>{data?.coverage ?? 0} / 5</strong></Card>
-      <Card><span className="tile-icon gold"><ChartNoAxesCombined size={21}/></span><p>Readiness score</p><strong>{data?.score == null ? 'Pending' : data.score + '%'}</strong></Card>
+      <Card><p>Target company</p><strong>{user.target?.company || 'Set a target'}</strong></Card>
+      <Card><p>Readiness components</p><strong>{data?.coverage ?? 0} <span className="stat-unit">/ 5</span></strong></Card>
+      <Card><p>Readiness score</p><strong>{data?.score == null ? 'Pending' : data.score + '%'}</strong></Card>
     </div>
     <Card title="Continue preparing"><div className="quick-links">
       {([['coding', Code2, 'Coding practice'], ['interview', AudioLines, 'Mock interview'], ['experiences', BookOpenText, 'Senior experiences'], ['report', ChartNoAxesCombined, 'Readiness report']] as const).map(([page, Icon, label]) =>
@@ -341,7 +347,7 @@ function App() {
     case 'profile': body = <Profile user={user} setUser={setUser}/>; break;
   }
   return <div className="shell">
-    <aside className={menu ? 'sidebar open' : 'sidebar'}><Logo compact/><nav aria-label="Workspace">{nav.map(([key, label, Icon]) => <button key={key} aria-current={actual === key ? 'page' : undefined} onClick={() => navigate(key)}><Icon size={19}/>{label}</button>)}</nav>
+    <aside className={menu ? 'sidebar open' : 'sidebar'}><Logo compact/><div className="navigation"><p>Your workspace</p><nav aria-label="Workspace">{nav.map(([key, label, Icon]) => <button key={key} aria-current={actual === key ? 'page' : undefined} onClick={() => navigate(key)}><Icon size={19}/>{label}</button>)}</nav></div>
       <div className="sidebar-bottom"><div className="account"><span className="avatar">{user.name.slice(0, 1).toUpperCase()}</span><div><strong>{user.name}</strong><span className="capitalize">{user.role}</span></div></div>
       <button className="secondary" disabled={logout.busy} onClick={() => void logout.run(async () => {await api('/auth/logout','POST'); setUser(null);})}><LogOut size={17}/>Sign out</button><Alert text={logout.error}/></div>
     </aside>
